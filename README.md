@@ -1,1 +1,5 @@
-# nimbus-notes
+<<<<<<< HEAD
+# Nimbus-notes
+=======
+# Nimbus Notes
+>>>>>>> dev
