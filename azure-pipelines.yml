@@ -1,19 +1,64 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
-- main
+  branches:
+    include:
+      - dev
+      - main
+
+pr:
+  branches:
+    include:
+      - dev
+      - main
 
 pool:
   name: SandboxAgent
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+variables:
+  nodeVersion: '18'
+  buildArtifactName: 'nimbusapp'
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+stages:
+- stage: Build
+  displayName: 'Build and Test'
+  jobs:
+  - job: BuildAndTest
+    steps:
+    - checkout: self
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '$(nodeVersion)'
+    - script: |
+        if [ -f package.json ]; then npm ci; fi
+      displayName: 'Install dependencies'
+    - script: |
+        if [ -f package.json ]; then npm test; fi
+      displayName: 'Run tests'
+      continueOnError: false
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.SourcesDirectory)'
+        ArtifactName: '$(buildArtifactName)'
+        publishLocation: 'Pipeline'
+
+- stage: DeployDev
+  displayName: 'Deploy to Dev'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.Reason'], 'Manual') == false)
+  jobs:
+  - deployment: DeployWebApp
+    displayName: 'Deploy Web App to Dev'
+    environment: 'dev'
+    pool:
+      vmImage: 'ubuntu-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: '$(buildArtifactName)'
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: 'nimbus-azure-connection'
+              appType: 'webApp'
+              appName: 'nimbusnotes-backend-dev' # replace with your Web App name
+              package: '$(Pipeline.Workspace)/$(buildArtifactName)'
