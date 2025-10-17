@@ -13,7 +13,7 @@ stages:
       steps:
         - task: AzureWebApp@1
           inputs:
-            azureSubscription: 'EduTrack-Dev-Connection'
+            azureSubscription: 'nimbus-azure-connection'
             appType: 'webAppLinux'
             appName: 'nimbus-notes-frontend-dev'
             package: '$(System.DefaultWorkingDirectory)/**/*.zip'
