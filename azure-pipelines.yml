@@ -11,9 +11,19 @@ stages:
   jobs:
     - job: DeployToDev
       steps:
+        # Archive the source code into a zip file
+        - task: ArchiveFiles@2
+          inputs:
+            rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+            includeRootFolder: false
+            archiveType: 'zip'
+            archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
+            replaceExistingArchive: true
+
+        # Deploy the zip file to Azure Web App
         - task: AzureWebApp@1
           inputs:
-            azureSubscription: 'EduTrack-Dev-Connection'
+            azureSubscription: 'nimbus-azure-connection'
             appType: 'webAppLinux'
             appName: 'nimbus-notes-frontend-dev'
-            package: '$(System.DefaultWorkingDirectory)/**/*.zip'
+            package: '$(Build.ArtifactStagingDirectory)/app.zip'
