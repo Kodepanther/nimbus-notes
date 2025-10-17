@@ -1,0 +1,19 @@
+trigger:
+  branches:
+    include:
+      - dev
+
+pool:
+  name: SandboxAgent
+
+stages:
+- stage: DevDeploy
+  jobs:
+    - job: DeployToDev
+      steps:
+        - task: AzureWebApp@1
+          inputs:
+            azureSubscription: 'EduTrack-Dev-Connection'
+            appType: 'webAppLinux'
+            appName: 'nimbus-notes-frontend-dev'
+            package: '$(System.DefaultWorkingDirectory)/**/*.zip'
