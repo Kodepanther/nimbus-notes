@@ -1,64 +1,112 @@
 trigger:
   branches:
     include:
-      - dev
       - main
+      - dev
+  paths:
+    exclude:
+      - README.md
+      - .gitignore
+      - '*.md'
 
 pr:
   branches:
     include:
-      - dev
       - main
+  paths:
+    exclude:
+      - README.md
+      - .gitignore
+      - '*.md'
 
 pool:
   name: SandboxAgent
 
 variables:
-  nodeVersion: '18'
-  buildArtifactName: 'nimbusapp'
+  nodeVersion: '18.x'
+  frontendAppName: 'nimbus-notes-frontend-dev'
+  frontendResourceGroup: 'rg-nimbus-dev'
+  workingDirectory: '$(System.DefaultWorkingDirectory)'
 
 stages:
+# ========================================
+# BUILD STAGE
+# ========================================
 - stage: Build
-  displayName: 'Build and Test'
+  displayName: 'Build Frontend'
   jobs:
-  - job: BuildAndTest
-    steps:
-    - checkout: self
-    - task: NodeTool@0
-      inputs:
-        versionSpec: '$(nodeVersion)'
-    - script: |
-        if [ -f package.json ]; then npm ci; fi
-      displayName: 'Install dependencies'
-    - script: |
-        if [ -f package.json ]; then npm test; fi
-      displayName: 'Run tests'
-      continueOnError: false
-    - task: PublishBuildArtifacts@1
-      inputs:
-        PathtoPublish: '$(Build.SourcesDirectory)'
-        ArtifactName: '$(buildArtifactName)'
-        publishLocation: 'Pipeline'
+    - job: BuildJob
+      displayName: 'Build Frontend App'
+      steps:
+        - task: NodeTool@0
+          displayName: 'Install Node.js $(nodeVersion)'
+          inputs:
+            versionSpec: $(nodeVersion)
 
-- stage: DeployDev
-  displayName: 'Deploy to Dev'
+        - script: |
+            echo 📦 Installing dependencies...
+            npm ci
+          displayName: 'npm install'
+          workingDirectory: $(workingDirectory)
+
+        - script: |
+            echo 🛠️ Building frontend...
+            npm run build
+          displayName: 'Build Frontend'
+          workingDirectory: $(workingDirectory)
+
+        - task: ArchiveFiles@2
+          displayName: '📦 Create Deployment Package'
+          inputs:
+            rootFolderOrFile: '$(workingDirectory)/build'
+            includeRootFolder: false
+            archiveType: 'zip'
+            archiveFile: '$(Build.ArtifactStagingDirectory)/frontend-$(Build.BuildId).zip'
+            replaceExistingArchive: true
+            verbose: true
+
+        - task: PublishBuildArtifacts@1
+          displayName: '📤 Publish Build Artifact'
+          inputs:
+            PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+            ArtifactName: 'frontend-drop'
+            publishLocation: 'Container'
+
+# ========================================
+# DEPLOY TO DEVELOPMENT
+# ========================================
+- stage: DeployDevelopment
+  displayName: 'Deploy Frontend to Development'
   dependsOn: Build
-  condition: and(succeeded(), eq(variables['Build.Reason'], 'Manual') == false)
+  condition: |
+    and(
+      succeeded(),
+      or(
+        eq(variables['Build.SourceBranchName'], 'main'),
+        eq(variables['Build.SourceBranchName'], 'dev')
+      )
+    )
   jobs:
-  - deployment: DeployWebApp
-    displayName: 'Deploy Web App to Dev'
-    environment: 'dev'
-    pool:
-      vmImage: 'ubuntu-latest'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - download: current
-            artifact: '$(buildArtifactName)'
-          - task: AzureWebApp@1
-            inputs:
-              azureSubscription: 'nimbus-azure-connection'
-              appType: 'webApp'
-              appName: 'nimbusnotes-backend-dev' # replace with your Web App name
-              package: '$(Pipeline.Workspace)/$(buildArtifactName)'
+    - deployment: DeployDev
+      displayName: 'Deploy Frontend to Dev Web App'
+      environment: 'development'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - task: DownloadBuildArtifacts@1
+                displayName: '⬇️ Download Build Artifact'
+                inputs:
+                  buildType: 'current'
+                  downloadType: 'single'
+                  artifactName: 'frontend-drop'
+                  downloadPath: '$(System.ArtifactsDirectory)'
+
+              - task: AzureWebApp@1
+                displayName: '🚀 Deploy to Frontend Web App'
+                inputs:
+                  azureSubscription: 'nimbus-azure-connection'
+                  appType: 'webAppLinux'
+                  appName: '$(frontendAppName)'
+                  resourceGroupName: '$(frontendResourceGroup)'
+                  package: '$(System.ArtifactsDirectory)/frontend-drop/frontend-$(Build.BuildId).zip'
