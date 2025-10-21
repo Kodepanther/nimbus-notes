@@ -22,12 +22,12 @@ stages:
   displayName: 'Build Frontend'
   jobs:
     - job: BuildJob
-      displayName: 'Build Static Frontend'
+      displayName: 'Archive Static Frontend Files'
       steps:
         - task: ArchiveFiles@2
           displayName: '📦 Archive Static Files'
           inputs:
-            rootFolderOrFile: '$(workingDirectory)/frontend'
+            rootFolderOrFile: '$(workingDirectory)'
             includeRootFolder: false
             archiveType: 'zip'
             archiveFile: '$(Build.ArtifactStagingDirectory)/frontend-static.zip'
