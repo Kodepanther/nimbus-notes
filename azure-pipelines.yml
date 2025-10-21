@@ -23,7 +23,7 @@ pool:
   name: SandboxAgent
 
 variables:
-  nodeVersion: '18.x'
+  nodeVersion: '22.x'
   frontendAppName: 'nimbus-notes-frontend-dev'
   frontendResourceGroup: 'rg-nimbus-dev'
   workingDirectory: '$(System.DefaultWorkingDirectory)'
