@@ -1,29 +1,112 @@
 trigger:
   branches:
     include:
+      - main
       - dev
+  paths:
+    exclude:
+      - README.md
+      - .gitignore
+      - '*.md'
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    exclude:
+      - README.md
+      - .gitignore
+      - '*.md'
 
 pool:
   name: SandboxAgent
 
+variables:
+  nodeVersion: '22.x'
+  frontendAppName: 'nimbus-notes-frontend-dev'
+  frontendResourceGroup: 'rg-nimbus-dev'
+  workingDirectory: '$(System.DefaultWorkingDirectory)'
+
 stages:
-- stage: DevDeploy
+# ========================================
+# BUILD STAGE
+# ========================================
+- stage: Build
+  displayName: 'Build Frontend'
   jobs:
-    - job: DeployToDev
+    - job: BuildJob
+      displayName: 'Build Frontend App'
       steps:
-        # Archive the source code into a zip file
-        - task: ArchiveFiles@2
+        - task: NodeTool@0
+          displayName: 'Install Node.js $(nodeVersion)'
           inputs:
-            rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+            versionSpec: $(nodeVersion)
+
+        - script: |
+            echo 📦 Installing dependencies...
+            npm ci
+          displayName: 'npm install'
+          workingDirectory: $(workingDirectory)
+
+        - script: |
+            echo 🛠️ Building frontend...
+            npm run build
+          displayName: 'Build Frontend'
+          workingDirectory: $(workingDirectory)
+
+        - task: ArchiveFiles@2
+          displayName: '📦 Create Deployment Package'
+          inputs:
+            rootFolderOrFile: '$(workingDirectory)/build'
             includeRootFolder: false
             archiveType: 'zip'
-            archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
+            archiveFile: '$(Build.ArtifactStagingDirectory)/frontend-$(Build.BuildId).zip'
             replaceExistingArchive: true
+            verbose: true
 
-        # Deploy the zip file to Azure Web App
-        - task: AzureWebApp@1
+        - task: PublishBuildArtifacts@1
+          displayName: '📤 Publish Build Artifact'
           inputs:
-            azureSubscription: 'nimbus-azure-connection'
-            appType: 'webAppLinux'
-            appName: 'nimbus-notes-frontend-dev'
-            package: '$(Build.ArtifactStagingDirectory)/app.zip'
+            PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+            ArtifactName: 'frontend-drop'
+            publishLocation: 'Container'
+
+# ========================================
+# DEPLOY TO DEVELOPMENT
+# ========================================
+- stage: DeployDevelopment
+  displayName: 'Deploy Frontend to Development'
+  dependsOn: Build
+  condition: |
+    and(
+      succeeded(),
+      or(
+        eq(variables['Build.SourceBranchName'], 'main'),
+        eq(variables['Build.SourceBranchName'], 'dev')
+      )
+    )
+  jobs:
+    - deployment: DeployDev
+      displayName: 'Deploy Frontend to Dev Web App'
+      environment: 'development'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - task: DownloadBuildArtifacts@1
+                displayName: '⬇️ Download Build Artifact'
+                inputs:
+                  buildType: 'current'
+                  downloadType: 'single'
+                  artifactName: 'frontend-drop'
+                  downloadPath: '$(System.ArtifactsDirectory)'
+
+              - task: AzureWebApp@1
+                displayName: '🚀 Deploy to Frontend Web App'
+                inputs:
+                  azureSubscription: 'nimbus-azure-connection'
+                  appType: 'webAppLinux'
+                  appName: '$(frontendAppName)'
+                  resourceGroupName: '$(frontendResourceGroup)'
+                  package: '$(System.ArtifactsDirectory)/frontend-drop/frontend-$(Build.BuildId).zip'
