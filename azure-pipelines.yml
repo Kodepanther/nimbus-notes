@@ -8,12 +8,11 @@ pool:
   name: SandboxAgent
 
 variables:
-  nodeVersion: '22.x'
   workingDirectory: '$(System.DefaultWorkingDirectory)'
   devAppName: 'nimbus-notes-frontend-dev'
   devResourceGroup: 'rg-nimbus-dev'
-  prodAppName: 'nimbus-notes-frontend-prod'
-  prodResourceGroup: 'rg-nimbus-prod'
+  stagingAppName: 'nimbus-notes-frontend-staging'
+  stagingResourceGroup: 'rg-nimbus-staging'
 
 stages:
 # ========================================
@@ -73,15 +72,15 @@ stages:
                   package: '$(System.ArtifactsDirectory)/frontend-drop/frontend-static.zip'
 
 # ========================================
-# DEPLOY TO PRODUCTION
+# DEPLOY TO STAGING
 # ========================================
-- stage: DeployToProd
-  displayName: 'Deploy to Production Web App'
+- stage: DeployToStaging
+  displayName: 'Deploy to Staging Web App'
   dependsOn: BuildFrontend
   condition: eq(variables['Build.SourceBranchName'], 'main')
   jobs:
-    - deployment: ProdDeploy
-      environment: 'production'
+    - deployment: StagingDeploy
+      environment: 'staging'
       strategy:
         runOnce:
           deploy:
@@ -95,10 +94,10 @@ stages:
                   downloadPath: '$(System.ArtifactsDirectory)'
 
               - task: AzureWebApp@1
-                displayName: '🚀 Deploy to Production Web App'
+                displayName: '🚀 Deploy to Staging Web App'
                 inputs:
                   azureSubscription: 'nimbus-azure-connection'
                   appType: 'webAppLinux'
-                  appName: '$(prodAppName)'
-                  resourceGroupName: '$(prodResourceGroup)'
+                  appName: '$(stagingAppName)'
+                  resourceGroupName: '$(stagingResourceGroup)'
                   package: '$(System.ArtifactsDirectory)/frontend-drop/frontend-static.zip'
