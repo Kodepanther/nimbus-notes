@@ -32,6 +32,7 @@ stages:
             archiveType: 'zip'
             archiveFile: '$(Build.ArtifactStagingDirectory)/frontend-static.zip'
             replaceExistingArchive: true
+            verbose: true
 
         - task: PublishBuildArtifacts@1
           displayName: '📤 Publish Build Artifact'
