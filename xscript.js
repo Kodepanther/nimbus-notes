@@ -1,42 +1,26 @@
-// ===========================================
-// Nimbus Notes Form Script
-// ===========================================
+function scrollToForm() {
+    document.getElementById('form').scrollIntoView({ 
+        behavior: 'smooth' 
+    });
+}
 
-// --- Configuration ---
-const API_URL = 'https://nimbus-notes-backend-dev.azurewebsites.net/api';
-
-// Resolve API base URL dynamically (supports local dev, override, or production)
+// Basic configuration for backend URL. Can be overridden by setting window.NIMBUS_API_BASE_URL before this script loads.
 const API_BASE_URL = (function resolveApiBaseUrl() {
     if (typeof window !== 'undefined' && window.NIMBUS_API_BASE_URL) {
         return window.NIMBUS_API_BASE_URL.replace(/\/$/, '');
     }
-
     const isLocal = typeof window !== 'undefined' && /localhost|127\.0\.0\.1/i.test(window.location.hostname);
-    return isLocal ? 'http://localhost:8080/api' : API_URL;
+    // Default to backend running on 8080 locally; otherwise try same origin (useful when served behind a reverse proxy)
+    return isLocal ? 'http://localhost:8080' : `${window.location.origin}`;
 })();
 
-const SUBMIT_ENDPOINT = '/users/submit';
+const SUBMIT_ENDPOINT = '/api/users/submit';
 
-// ===========================================
-// Utility Functions
-// ===========================================
-
-// Smooth scroll to form
-function scrollToForm() {
-    document.getElementById('form')?.scrollIntoView({
-        behavior: 'smooth'
-    });
-}
-
-// Email validation
 function validateEmail(email) {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email.toLowerCase());
+    return re.test(email);
 }
 
-// ===========================================
-// Main Form Handler
-// ===========================================
 async function handleSubmit() {
     // Get form values
     const name = document.getElementById('name').value.trim();
@@ -44,7 +28,6 @@ async function handleSubmit() {
     const phone = document.getElementById('phone').value.trim();
     const company = document.getElementById('company').value.trim();
     const message = document.getElementById('message').value.trim();
-
     const generalErrorEl = document.getElementById('generalError');
     const submitButton = document.querySelector('.submit-button');
 
@@ -59,25 +42,25 @@ async function handleSubmit() {
 
     let isValid = true;
 
-    // Validate fields
+    // Validate name
     if (!name) {
         document.getElementById('nameError').style.display = 'block';
         isValid = false;
     }
 
+    // Validate email
     if (!email || !validateEmail(email)) {
         document.getElementById('emailError').style.display = 'block';
         isValid = false;
     }
 
+    // Validate message
     if (!message) {
         document.getElementById('messageError').style.display = 'block';
         isValid = false;
     }
 
-    // =======================================
-    // Submit Data
-    // =======================================
+    // If form is valid, submit to backend
     if (isValid) {
         const payload = { name, email, phone, company, message };
 
@@ -89,7 +72,9 @@ async function handleSubmit() {
 
             const response = await fetch(`${API_BASE_URL}${SUBMIT_ENDPOINT}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify(payload)
             });
 
@@ -98,21 +83,19 @@ async function handleSubmit() {
             const data = isJson ? await response.json() : null;
 
             if (!response.ok) {
-                const errorMessage =
-                    (data && (data.message || (data.errors?.[0]?.message))) ||
-                    'Submission failed. Please try again.';
+                const errorMessage = (data && (data.message || (data.errors && data.errors[0] && data.errors[0].message))) || 'Submission failed. Please try again.';
                 throw new Error(errorMessage);
             }
 
-            // Hide form, show success
             document.getElementById('userForm').style.display = 'none';
             document.getElementById('successMessage').style.display = 'block';
 
-            // Reset fields after delay
             setTimeout(() => {
-                ['name', 'email', 'phone', 'company', 'message'].forEach(id => {
-                    document.getElementById(id).value = '';
-                });
+                document.getElementById('name').value = '';
+                document.getElementById('email').value = '';
+                document.getElementById('phone').value = '';
+                document.getElementById('company').value = '';
+                document.getElementById('message').value = '';
             }, 3000);
         } catch (err) {
             if (generalErrorEl) {
@@ -128,24 +111,22 @@ async function handleSubmit() {
             }
         }
     } else {
-        // Scroll to first visible error
+        // Scroll to first error
         const firstError = document.querySelector('.error-message[style*="display: block"]');
         if (firstError) {
-            firstError.parentElement.scrollIntoView({
-                behavior: 'smooth',
-                block: 'center'
+            firstError.parentElement.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
             });
         }
     }
 }
 
-// ===========================================
-// Add Enter Key Support
-// ===========================================
-document.addEventListener('DOMContentLoaded', function () {
+// Add enter key support for form submission
+document.addEventListener('DOMContentLoaded', function() {
     const inputs = document.querySelectorAll('input, textarea');
     inputs.forEach(input => {
-        input.addEventListener('keypress', function (e) {
+        input.addEventListener('keypress', function(e) {
             if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
                 e.preventDefault();
                 handleSubmit();
