@@ -1,0 +1,15 @@
+{
+  "name": "nimbus-notes-frontend-dev",
+  "version": "1.0.0",
+  "description": "Nimbus Notes Landing Page",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=22.x"
+  }
+}
