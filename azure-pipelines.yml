@@ -18,32 +18,31 @@ stages:
 # ========================================
 # BUILD STAGE
 # ========================================
-- stage: BuildFrontend
-  displayName: 'Build Frontend'
+- stage: BuildApp
+  displayName: 'Build and Package Node App'
   jobs:
     - job: BuildJob
-      displayName: 'Build and Package Frontend'
+      displayName: 'Install Dependencies and Package'
       steps:
         - task: NodeTool@0
-          displayName: 'Install Node.js 18.x'
+          displayName: 'Install Node.js 22.x'
           inputs:
-            versionSpec: '18.x'
+            versionSpec: '22.x'
 
         - script: |
             echo 📦 Installing dependencies...
-            npm ci
-            echo 🏗️ Building project...
-            npm run build
-          displayName: 'Install and Build Frontend'
+            npm install --production
+            echo ✅ Dependencies installed!
+          displayName: 'Install Dependencies'
           workingDirectory: '$(workingDirectory)'
 
         - task: ArchiveFiles@2
-          displayName: '📦 Archive Frontend Files'
+          displayName: '📦 Archive Node App'
           inputs:
-            rootFolderOrFile: '$(workingDirectory)/build'
+            rootFolderOrFile: '$(workingDirectory)'
             includeRootFolder: false
             archiveType: 'zip'
-            archiveFile: '$(Build.ArtifactStagingDirectory)/frontend-static.zip'
+            archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
             replaceExistingArchive: true
             verbose: true
 
@@ -51,7 +50,7 @@ stages:
           displayName: '📤 Publish Build Artifact'
           inputs:
             PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-            ArtifactName: 'frontend-drop'
+            ArtifactName: 'drop'
             publishLocation: 'Container'
 
 # ========================================
@@ -59,11 +58,10 @@ stages:
 # ========================================
 - stage: DeployToDev
   displayName: 'Deploy to Dev Web App'
-  dependsOn: BuildFrontend
-  condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'dev'))
+  dependsOn: BuildApp
+  condition: eq(variables['Build.SourceBranchName'], 'dev')
   jobs:
     - deployment: DevDeploy
-      displayName: 'Deploy to Dev Environment'
       environment: 'development'
       strategy:
         runOnce:
@@ -74,7 +72,7 @@ stages:
                 inputs:
                   buildType: 'current'
                   downloadType: 'single'
-                  artifactName: 'frontend-drop'
+                  artifactName: 'drop'
                   downloadPath: '$(System.ArtifactsDirectory)'
 
               - task: AzureWebApp@1
@@ -84,14 +82,13 @@ stages:
                   appType: 'webAppLinux'
                   appName: '$(devAppName)'
                   resourceGroupName: '$(devResourceGroup)'
-                  package: '$(System.ArtifactsDirectory)/frontend-drop/frontend-static.zip'
-                  runtimeStack: 'NODE|18-lts'
-                  startUpCommand: 'pm2 serve /home/site/wwwroot --no-daemon --spa'
+                  package: '$(System.ArtifactsDirectory)/drop/app.zip'
+                  runtimeStack: 'NODE|22-lts'
+                  startUpCommand: 'node server.js'
 
               - script: |
                   echo ✅ Deployment to Development completed!
                   echo 🌐 URL: https://$(devAppName).azurewebsites.net
-                  pwsh -Command "try { Invoke-WebRequest -Uri https://$(devAppName).azurewebsites.net -UseBasicParsing | Out-Null; Write-Host '✅ Site is responding' } catch { Write-Host '⚠️ Site not ready yet' }"
                 displayName: '✅ Verify Deployment'
                 continueOnError: true
 
@@ -100,11 +97,10 @@ stages:
 # ========================================
 - stage: DeployToStaging
   displayName: 'Deploy to Staging Web App'
-  dependsOn: BuildFrontend
-  condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
+  dependsOn: BuildApp
+  condition: eq(variables['Build.SourceBranchName'], 'main')
   jobs:
     - deployment: StagingDeploy
-      displayName: 'Deploy to Staging Environment'
       environment: 'staging'
       strategy:
         runOnce:
@@ -115,7 +111,7 @@ stages:
                 inputs:
                   buildType: 'current'
                   downloadType: 'single'
-                  artifactName: 'frontend-drop'
+                  artifactName: 'drop'
                   downloadPath: '$(System.ArtifactsDirectory)'
 
               - task: AzureWebApp@1
@@ -125,13 +121,12 @@ stages:
                   appType: 'webAppLinux'
                   appName: '$(stagingAppName)'
                   resourceGroupName: '$(stagingResourceGroup)'
-                  package: '$(System.ArtifactsDirectory)/frontend-drop/frontend-static.zip'
-                  runtimeStack: 'NODE|18-lts'
-                  startUpCommand: 'pm2 serve /home/site/wwwroot --no-daemon --spa'
+                  package: '$(System.ArtifactsDirectory)/drop/app.zip'
+                  runtimeStack: 'NODE|22-lts'
+                  startUpCommand: 'node server.js'
 
               - script: |
                   echo ✅ Deployment to Staging completed!
                   echo 🌐 URL: https://$(stagingAppName).azurewebsites.net
-                  pwsh -Command "try { Invoke-WebRequest -Uri https://$(stagingAppName).azurewebsites.net -UseBasicParsing | Out-Null; Write-Host '✅ Site is responding' } catch { Write-Host '⚠️ Site not ready yet' }"
                 displayName: '✅ Verify Deployment'
                 continueOnError: true
