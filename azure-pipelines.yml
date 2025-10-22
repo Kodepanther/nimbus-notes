@@ -1,29 +1,135 @@
 trigger:
   branches:
     include:
+      - main
       - dev
 
 pool:
   name: SandboxAgent
 
+variables:
+  workingDirectory: '$(System.DefaultWorkingDirectory)'
+  devAppName: 'nimbus-notes-frontend-dev'
+  devResourceGroup: 'rg-nimbus-dev'
+  stagingAppName: 'nimbus-notes-frontend-staging'
+  stagingResourceGroup: 'rg-nimbus-staging'
+
 stages:
-- stage: DevDeploy
+# ========================================
+# BUILD STAGE
+# ========================================
+- stage: BuildFrontend
+  displayName: 'Build Frontend'
   jobs:
-    - job: DeployToDev
+    - job: BuildJob
+      displayName: 'Build and Package Frontend'
       steps:
-        # Archive the source code into a zip file
-        - task: ArchiveFiles@2
+        - task: NodeTool@0
+          displayName: 'Install Node.js 18.x'
           inputs:
-            rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+            versionSpec: '18.x'
+
+        - script: |
+            echo 📦 Installing dependencies...
+            npm install --production
+          displayName: 'npm install'
+          workingDirectory: '$(workingDirectory)'
+
+        - task: ArchiveFiles@2
+          displayName: '📦 Archive Frontend Files'
+          inputs:
+            rootFolderOrFile: '$(workingDirectory)'
             includeRootFolder: false
             archiveType: 'zip'
-            archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
+            archiveFile: '$(Build.ArtifactStagingDirectory)/frontend-static.zip'
             replaceExistingArchive: true
+            verbose: true
 
-        # Deploy the zip file to Azure Web App
-        - task: AzureWebApp@1
+        - task: PublishBuildArtifacts@1
+          displayName: '📤 Publish Build Artifact'
           inputs:
-            azureSubscription: 'nimbus-azure-connection'
-            appType: 'webAppLinux'
-            appName: 'nimbus-notes-frontend-dev'
-            package: '$(Build.ArtifactStagingDirectory)/app.zip'
+            PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+            ArtifactName: 'frontend-drop'
+            publishLocation: 'Container'
+
+# ========================================
+# DEPLOY TO DEVELOPMENT
+# ========================================
+- stage: DeployToDev
+  displayName: 'Deploy to Dev Web App'
+  dependsOn: BuildFrontend
+  condition: eq(variables['Build.SourceBranchName'], 'dev')
+  jobs:
+    - deployment: DevDeploy
+      environment: 'development'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - task: DownloadBuildArtifacts@1
+                displayName: '⬇️ Download Build Artifact'
+                inputs:
+                  buildType: 'current'
+                  downloadType: 'single'
+                  artifactName: 'frontend-drop'
+                  downloadPath: '$(System.ArtifactsDirectory)'
+
+              - task: AzureWebApp@1
+                displayName: '🚀 Deploy to Dev Web App'
+                inputs:
+                  azureSubscription: 'nimbus-azure-connection'
+                  appType: 'webAppLinux'
+                  appName: '$(devAppName)'
+                  resourceGroupName: '$(devResourceGroup)'
+                  package: '$(System.ArtifactsDirectory)/frontend-drop/frontend-static.zip'
+                  runtimeStack: 'NODE|18-lts'
+                  startUpCommand: 'npm start'
+
+              - script: |
+                  echo ✅ Deployment to Development completed!
+                  echo 🌐 URL: https://$(devAppName).azurewebsites.net
+                  timeout /t 10 /nobreak
+                  powershell -Command "try { Invoke-WebRequest -Uri https://$(devAppName).azurewebsites.net -UseBasicParsing | Out-Null; Write-Host '✅ Site is responding' } catch { Write-Host '⚠️ Site not ready yet' }"
+                displayName: '✅ Verify Deployment'
+                continueOnError: true
+
+# ========================================
+# DEPLOY TO STAGING
+# ========================================
+- stage: DeployToStaging
+  displayName: 'Deploy to Staging Web App'
+  dependsOn: BuildFrontend
+  condition: eq(variables['Build.SourceBranchName'], 'main')
+  jobs:
+    - deployment: StagingDeploy
+      environment: 'staging'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - task: DownloadBuildArtifacts@1
+                displayName: '⬇️ Download Build Artifact'
+                inputs:
+                  buildType: 'current'
+                  downloadType: 'single'
+                  artifactName: 'frontend-drop'
+                  downloadPath: '$(System.ArtifactsDirectory)'
+
+              - task: AzureWebApp@1
+                displayName: '🚀 Deploy to Staging Web App'
+                inputs:
+                  azureSubscription: 'nimbus-azure-connection'
+                  appType: 'webAppLinux'
+                  appName: '$(stagingAppName)'
+                  resourceGroupName: '$(stagingResourceGroup)'
+                  package: '$(System.ArtifactsDirectory)/frontend-drop/frontend-static.zip'
+                  runtimeStack: 'NODE|18-lts'
+                  startUpCommand: 'npm start'
+
+              - script: |
+                  echo ✅ Deployment to Staging completed!
+                  echo 🌐 URL: https://$(stagingAppName).azurewebsites.net
+                  timeout /t 10 /nobreak
+                  powershell -Command "try { Invoke-WebRequest -Uri https://$(stagingAppName).azurewebsites.net -UseBasicParsing | Out-Null; Write-Host '✅ Site is responding' } catch { Write-Host '⚠️ Site not ready yet' }"
+                displayName: '✅ Verify Deployment'
+                continueOnError: true
